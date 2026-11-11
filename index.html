@@ -2,7 +2,7 @@
      Copyright © 2026 Justin Zhang Jun. Released under the MIT License (see LICENSE).
      Free for personal, commercial, academic and teaching use. -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -40,7 +40,7 @@
   #skyveil { position: fixed; inset: 0; background: #e8f1ff; opacity: 0; pointer-events: none; z-index: 999; }
 
   /* cinema mode (F): hide all UI chrome */
-  body.gx-cinema #lang { visibility: hidden; } /* keeps its slot so the cinema button does not jump */
+  body.gx-cinema #lang, body.gx-cinema #spinbtn { visibility: hidden; } /* keeps its slot so the cinema button does not jump */
   body.gx-cinema #title, body.gx-cinema #audio, body.gx-cinema #beacons,
   body.gx-cinema #skyback, body.gx-cinema #skylabels, body.gx-cinema #solarback, body.gx-cinema #solarlabels { display: none !important; }
 
@@ -50,12 +50,12 @@
     background: rgba(10,14,24,.72); border: 1px solid #243049; border-radius: 8px; padding: 5px 8px; cursor: pointer; }
   #lang:hover { border-color: #6366f1; }
   /* cinema toggle: beside the language select; the one control left (faintly) in cinema mode — the way out on touch screens */
-  #cinemabtn { display: flex; align-items: center; justify-content: center;
-    width: 34px; height: 29px; padding: 0; cursor: pointer; color: #cbd5e1; background: rgba(10,14,24,.72); border: 1px solid #243049; border-radius: 8px; }
+  #cinemabtn, #spinbtn { display: flex; align-items: center; justify-content: center;
+    width: 34px; height: 29px; padding: 0; cursor: pointer; color: #cbd5e1; background: rgba(10,14,24,.72); border: 1px solid #243049; border-radius: 8px; font-size: 13px; }
   body.gx-cinema #cinemabtn { opacity: .25; }
   body.gx-cinema #cinemabtn:focus-visible { opacity: 1; }
   @media (hover: hover) { /* touch screens keep :hover after a tap — the faint exit must not stick at full strength */
-    #cinemabtn:hover { border-color: #6366f1; color: #fff; }
+    #cinemabtn:hover, #spinbtn:hover { border-color: #6366f1; color: #fff; }
     body.gx-cinema #cinemabtn:hover { opacity: 1; }
   }
 
@@ -220,7 +220,7 @@
     #title small { max-width: calc(100vw - 190px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #lang { height: 44px; } /* WebKit ignores min-height on a native select */
     #return-mw { min-height: 44px; line-height: 26px; }
-    #audiobtn, #cinemabtn, #scalecmp-close { min-width: 44px; min-height: 44px; }
+    #audiobtn, #cinemabtn, #spinbtn, #scalecmp-close { min-width: 44px; min-height: 44px; }
     #bp-close { min-width: 44px; min-height: 44px; top: 2px; right: 2px; }
   }
 
@@ -246,13 +246,13 @@
 <div id="title" class="overlay">Milky Way Galaxy
   <small>drag to orbit · scroll to zoom · F cinema · M music</small><a id="credits" href="https://github.com/zjoooooo/galaxy-explorer/blob/main/THIRD-PARTY-NOTICES.md" target="_blank" rel="noopener">Credits &amp; source</a></div>
 
-<div id="topbar" class="overlay"><button id="cinemabtn" type="button" title="Cinema mode — hide the interface (F)" aria-label="Cinema mode" aria-pressed="false"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+<div id="topbar" class="overlay"><button id="spinbtn" type="button" title="Pause galaxy rotation" aria-label="Pause galaxy rotation" aria-pressed="false">⏸</button><button id="cinemabtn" type="button" title="Cinema mode — hide the interface (F)" aria-label="Cinema mode" aria-pressed="false"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
 <select id="lang" title="Language">
   <option value="en">English</option>
   <option value="hans">简体中文</option>
   <option value="hant">繁體中文</option>
   <option value="ja">日本語</option>
-  <option value="ko">한국어</option>
+  <option value="ko" selected>한국어</option>
 </select></div>
 
 <button id="skyback" class="overlay" type="button" aria-label="← Back to Galaxy">← Back to Galaxy</button>
@@ -331,7 +331,8 @@
   var BLOOM = { strength: 0.08, radius: 0.32, threshold: 0.42 };
   var TONE = { exposure: 1.1 };
   var DUST = { count: 30000, min: 1500, radius: 360, arms: 4, minorDim: 0.42, tight: 0.85, armWidth: 46, randomness: 0.5, thickness: 24, radPow: 0.72, size: 4.0, brightness: 0.5, inside: 0xffcf8a, outside: 0x86acec, hii: 0xff5fa8, blueStar: 0xcfe6ff };
-  var GALAXY_SPIN = 0.013;
+  var GALAXY_SPIN = -0.013; // negative: with galaxyRoot mirrored in x, this spins clockwise as seen from the north galactic pole (real galaxies/Sun orbit that way, toward l=90° — confirmed against multiple sources, not the counter-clockwise spin this sim used to have)
+  var galaxySpinPaused = false, galaxySpinPauseOffset = 0, galaxySpinPauseStart = 0; // #spinbtn: pauseOffset keeps resuming from jumping ahead by the paused duration
 
   function setMsg(t) { var el = document.getElementById('msg'); if (el) el.textContent = t || ''; }
   function setOn(el, on) { // visible + announced toggle state; the pause button is not a toggle (its label flips Pause/Play)
@@ -363,7 +364,7 @@
   try {
     renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: false }); // frames go through the composers' render targets; an MSAA backbuffer only cost memory
   } catch (glError) { // WebGL off or unavailable: explain, then stop (nothing below can run without it)
-    var noGlLang = 'en'; try { noGlLang = localStorage.getItem('gx-lang') || 'en'; } catch (e) {}
+    var noGlLang = 'ko'; try { noGlLang = localStorage.getItem('gx-lang') || 'ko'; } catch (e) {}
     setMsg({ en: 'Galaxy Explorer needs WebGL, which is turned off or unavailable in this browser.', hans: '本页面需要 WebGL,但当前浏览器未启用或不支持。',
       hant: '本頁面需要 WebGL,但目前的瀏覽器未啟用或不支援。', ja: 'このページには WebGL が必要ですが、このブラウザーでは無効か利用できません。',
       ko: '이 페이지에는 WebGL이 필요하지만 현재 브라우저에서 꺼져 있거나 지원되지 않습니다.' }[noGlLang] || 'Galaxy Explorer needs WebGL, which is turned off or unavailable in this browser.');
@@ -387,7 +388,7 @@
   var scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x03040a, 0.0012);
   // everything that co-rotates (dust + painted disc + effects) lives under this group
-  var galaxyRoot = new THREE.Group(); scene.add(galaxyRoot);
+  var galaxyRoot = new THREE.Group(); galaxyRoot.scale.x = -1; scene.add(galaxyRoot); // mirrored in x: makes the disc spin clockwise seen from the north galactic pole (+Y), matching the real Milky Way — see GALAXY_SPIN and the "fixed" external-galaxy x-negation below
   var camera = new THREE.PerspectiveCamera(55, outputWidth / outputHeight, 0.5, 5000);
   camera.position.set(0, 529, 715); // elevated 3/4 view (el ≈ 36.5°, d ≈ 890), pulled back so the disc, the Magellanic Clouds and Triangulum all frame on load
   var controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -1006,7 +1007,7 @@
   // arm). Each frame the 3D point is projected to the screen and a borderless
   // HTML beacon (glow dot + pulse rings + label) is moved onto it.
   var BEACONS = [];
-  var beaconLang = 'en'; try { var storedLang = localStorage.getItem('gx-lang'); if (['en', 'hans', 'hant', 'ja', 'ko'].indexOf(storedLang) !== -1) beaconLang = storedLang; } catch (e) {} // whitelist: a prototype key like 'constructor' would defeat every || fallback
+  var beaconLang = 'ko'; try { var storedLang = localStorage.getItem('gx-lang'); if (['en', 'hans', 'hant', 'ja', 'ko'].indexOf(storedLang) !== -1) beaconLang = storedLang; } catch (e) {} // whitelist: a prototype key like 'constructor' would defeat every || fallback
   function setBeaconLang(lang) {
     beaconLang = lang;
     try { localStorage.setItem('gx-lang', lang); } catch (e) {}
@@ -1044,11 +1045,10 @@
         .addScaledVector(along, d * Math.cos(b) * Math.sin(l))
         .add(new THREE.Vector3(0, d * Math.sin(b), 0));
     }
-    // Known mirror, kept on purpose: +b goes to +Y, but the disc spins counter-clockwise seen from +Y (GALAXY_SPIN > 0)
-    // and l = 90° points along the Sun's motion, so +Y is really the SOUTH galactic pole. Off-plane objects (halo
-    // globulars, the external galaxies) therefore sit on the wrong side of the disc. Negating b alone throws the
-    // Magellanic Clouds, M31 and M33 out of the opening frame; the correct fix is to mirror the whole galaxy view
-    // in x (galaxyRoot.scale.x = -1, GALAXY_SPIN < 0, fixed galaxies' x negated), which flips the composition.
+    // Fixed: +b goes to +Y, so +Y is the north galactic pole, and l = 90° points along the Sun's motion.
+    // galaxyRoot is mirrored in x (scale.x = -1) with GALAXY_SPIN < 0, so the disc now spins clockwise seen
+    // from +Y, matching the real Milky Way. "fixed" external galaxies aren't children of galaxyRoot (they sit
+    // on the far sky, not co-rotating — see updateBeacons), so their x is negated below to match the mirror.
     // Positions are REAL: galPos(l, b, distKly) from published galactic coordinates
     // (multi-source cross-checked). The label declutter in updateBeacons handles the
     // resulting solar-neighbourhood crowding — dots stay, crowded labels reappear on zoom.
@@ -1261,6 +1261,7 @@
     var host = document.createElement('div'); host.id = 'beacons'; document.body.appendChild(host);
     for (var i = 0; i < DEFS.length; i++) {
       var d = DEFS[i], el = document.createElement('div');
+      if (d.fixed) d.p.x = -d.p.x; // not a galaxyRoot child, so it doesn't inherit the disc's x-mirror — negate to match
       el.className = 'beacon' + (d.cls ? ' ' + d.cls : '');
       var videoTarget = videoTargetForBeacon(d);
       if (videoTarget) el.dataset.videoTarget = videoTarget;
@@ -4481,7 +4482,7 @@
       rafId = requestAnimationFrame(frame);
       return;
     }
-    if (!solarReducedMotion()) galaxyRoot.rotation.y = t * GALAXY_SPIN; // the whole galaxy slowly rotates
+    if (!solarReducedMotion() && !galaxySpinPaused) galaxyRoot.rotation.y = (t - galaxySpinPauseOffset) * GALAXY_SPIN; // the whole galaxy slowly rotates; #spinbtn can hold it steady
     for (var li = 0; li < galaxyLODs.length; li++) { // per-galaxy LOD + self-rotation about the disc axis
       var L = galaxyLODs[li], dst = camera.position.distanceTo(L.center); L.dst = dst; // cached for the feature LOD gate below
       L.pts.geometry.setDrawRange(0, Math.max(400, Math.floor(L.maxN * Math.min(1, Math.max(0.14, L.refDist / dst)) * perfScale)));
@@ -4838,9 +4839,24 @@
     var cinemaBtn = document.getElementById('cinemabtn'); if (cinemaBtn) cinemaBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
   document.getElementById('cinemabtn').addEventListener('click', function (e) { e.stopPropagation(); toggleCinema(); });
-  ['audio', 'cinemabtn'].forEach(function (id) { // a pointer click must not leave focus behind (it would pin the track list open, or ring the button on the next key press)
+  ['audio', 'cinemabtn', 'spinbtn'].forEach(function (id) { // a pointer click must not leave focus behind (it would pin the track list open, or ring the button on the next key press)
     document.getElementById(id).addEventListener('click', function (e) { if (e.detail && this.contains(document.activeElement)) document.activeElement.blur(); }, true);
   });
+
+  // galaxy spin pause/resume (#spinbtn)
+  function toggleGalaxySpin(force) {
+    var paused = (force != null) ? force : !galaxySpinPaused;
+    if (paused === galaxySpinPaused) return;
+    var nowT = (videoNow() - t0) / 1000;
+    if (paused) galaxySpinPauseStart = nowT; else galaxySpinPauseOffset += nowT - galaxySpinPauseStart;
+    galaxySpinPaused = paused;
+    var btn = document.getElementById('spinbtn'); if (!btn) return;
+    btn.setAttribute('aria-pressed', paused ? 'true' : 'false');
+    btn.textContent = paused ? '▶' : '⏸';
+    var label = paused ? 'Resume galaxy rotation' : 'Pause galaxy rotation';
+    btn.setAttribute('aria-label', label); btn.title = label;
+  }
+  document.getElementById('spinbtn').addEventListener('click', function (e) { e.stopPropagation(); toggleGalaxySpin(); });
 
   // ── deep-field background (Hubble-deep-field feel): dozens of TINY distant
   // galaxies of varied morphology, hue, size and orientation, mildly clustered
