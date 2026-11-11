@@ -392,7 +392,7 @@
   var camera = new THREE.PerspectiveCamera(55, outputWidth / outputHeight, 0.5, 5000);
   camera.position.set(0, 529, 715); // elevated 3/4 view (el ≈ 36.5°, d ≈ 890), pulled back so the disc, the Magellanic Clouds and Triangulum all frame on load
   var controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxDistance = 1600; controls.minDistance = 5;
+  controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxDistance = 1600; controls.minDistance = 1;
 
   // ── independent solar scene shell (bodies are added in the next task) ────────
   var solarScene = new THREE.Scene();
@@ -2738,6 +2738,15 @@
   function clickWasDrag(e) { return Math.abs(e.clientX - clickDragGuard.x) > 6 || Math.abs(e.clientY - clickDragGuard.y) > 6; }
   function onPageControl(e) { return !!(e.target && e.target.closest && e.target.closest('.overlay, #beacon-panel')); } // language, music, top bar, card, back buttons
   window.addEventListener('click', function (e) { if (!clickWasDrag(e) && !onPageControl(e) && selectedBeacon !== null) clearSelection(); }); // outside click closes — but an orbit drag is not a click
+  // Beacon dots/labels (and their sky/solar equivalents) are separate overlay elements stacked on top of
+  // the canvas, not inside it — a wheel event that lands on one never reaches the canvas's own listener,
+  // so OrbitControls silently misses it. Re-fire it at the canvas instead of letting it vanish.
+  document.addEventListener('wheel', function (e) {
+    if (e.target === renderer.domElement || renderer.domElement.contains(e.target)) return; // already reaches OrbitControls natively
+    if (!e.target.closest || !e.target.closest('.beacon, .skylabel, .solar-label')) return; // these overlays have no scroll of their own — everything else (panels, strips) keeps native wheel behaviour
+    e.preventDefault();
+    renderer.domElement.dispatchEvent(new WheelEvent('wheel', { deltaX: e.deltaX, deltaY: e.deltaY, deltaZ: e.deltaZ, deltaMode: e.deltaMode, clientX: e.clientX, clientY: e.clientY, bubbles: true, cancelable: true }));
+  }, { passive: false, capture: true });
   bpEl.addEventListener('click', function (e) { e.stopPropagation(); }); // clicks inside the panel don't close it
   bpBody.addEventListener('click', function (e) {
     if (e.target && e.target.id === 'bp-solar-link') enterSolar();
