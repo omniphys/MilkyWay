@@ -33,9 +33,6 @@
 
   .overlay { position: fixed; z-index: 5; }
   #title { top: calc(14px + env(safe-area-inset-top, 0px)); left: calc(18px + env(safe-area-inset-left, 0px)); font-size: 15px; font-weight: 600; pointer-events: none; }
-  #title small { display: block; font-size: 11px; color: #8b93a7; font-weight: 400; margin-top: 2px; }
-  #credits { display: inline-block; margin-top: 2px; font-size: 10px; font-weight: 400; color: #8b93a7; text-decoration: none; pointer-events: auto; } /* image credits (CC BY) + the code */
-  #credits:hover, #credits:focus-visible { color: #cfe0ff; text-decoration: underline; }
   #msg { top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 13px; color: #9ca3af; pointer-events: none; }
   #skyveil { position: fixed; inset: 0; background: #e8f1ff; opacity: 0; pointer-events: none; z-index: 999; }
 
@@ -217,7 +214,6 @@
     body:has(#beacon-panel.open) #galaxystrip, body:has(#beacon-panel.open) #solarstrip,
     body:has(#beacon-panel.open) #solartime, body:has(#beacon-panel.open) #audio { visibility: hidden; }
     #skyback, #solarback { min-height: 44px; }
-    #title small { max-width: calc(100vw - 190px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #lang { height: 44px; } /* WebKit ignores min-height on a native select */
     #return-mw { min-height: 44px; line-height: 26px; }
     #audiobtn, #cinemabtn, #spinbtn, #scalecmp-close { min-width: 44px; min-height: 44px; }
@@ -243,8 +239,7 @@
 <body>
 <canvas id="cv"></canvas>
 
-<div id="title" class="overlay">Milky Way Galaxy
-  <small>drag to orbit · scroll to zoom · F cinema · M music</small><a id="credits" href="https://github.com/zjoooooo/galaxy-explorer/blob/main/THIRD-PARTY-NOTICES.md" target="_blank" rel="noopener">Credits &amp; source</a></div>
+<div id="title" class="overlay">Milky Way Galaxy</div>
 
 <div id="topbar" class="overlay"><button id="spinbtn" type="button" title="Pause galaxy rotation" aria-label="Pause galaxy rotation" aria-pressed="false">⏸</button><button id="cinemabtn" type="button" title="Cinema mode — hide the interface (F)" aria-label="Cinema mode" aria-pressed="false"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
 <select id="lang" title="Language">
@@ -1039,7 +1034,12 @@
     var KLY = DUST.radius / 52; // model units per kly (disc radius 360u ≈ 52 kly)
     function galPos(lDeg, bDeg, distKly) {
       var l = lDeg * Math.PI / 180, b = bDeg * Math.PI / 180, d = distKly * KLY;
-      d = Math.max(d, 2.5); // ponytail: display floor — Sirius (8.6 ly ≈ 0.06u) would sit inside the Sun's dot
+      // ponytail: at true scale, every naked-eye-close star (Sirius 8.6 ly, Proxima 4.2 ly, …) would sit
+      // inside the Sun's dot — AND on top of each other, hiding that Sirius is really ~2x farther than
+      // Proxima. Linearly spread anything within ~22 ly (0.15u) across a small visible range so that
+      // ratio stays legible; anything farther but still sub-scale just gets the old flat floor.
+      var NEAR_EDGE = 0.15, NEAR_MIN = 1.0, FLOOR = 2.5;
+      d = d < NEAR_EDGE ? NEAR_MIN + (d / NEAR_EDGE) * (FLOOR - NEAR_MIN) : Math.max(d, FLOOR);
       return sun.clone()
         .addScaledVector(inward, d * Math.cos(b) * Math.cos(l))
         .addScaledVector(along, d * Math.cos(b) * Math.sin(l))
@@ -2640,6 +2640,11 @@
     }
     if (solarTrojans) solarTrojans.rotation.y = solarBeltCenterAngle(SOLAR_BY_ID.jupiter, solarFutureAngle(SOLAR_BY_ID.jupiter, SOLAR_OBJECTS.jupiter, solarElapsed)); // the swarms co-orbit with Jupiter
   }
+  function scrollStripToReveal(strip, btn) { // like scrollIntoView, but leaves a margin so the NEXT button is already reachable, not just the selected one
+    var sr = strip.getBoundingClientRect(), br = btn.getBoundingClientRect(), margin = 140;
+    if (br.left - sr.left < margin) strip.scrollTo({ left: Math.max(0, strip.scrollLeft - (sr.left + margin - br.left)), behavior: 'smooth' });
+    else if (sr.right - br.right < margin) strip.scrollTo({ left: strip.scrollLeft + (margin - (sr.right - br.right)), behavior: 'smooth' });
+  }
   var selectedBeacon = null;
   function selectBeacon(i) {
     noteCardOpener();
@@ -2650,7 +2655,7 @@
       BEACONS[k].el.classList.toggle('dim', k !== i);
     }
     var gStrip = document.getElementById('galaxystrip'); // mirror the highlight onto the bottom roster
-    if (gStrip) for (var gs = 0; gs < gStrip.children.length; gs++) { var gb = gStrip.children[gs]; gb.classList.toggle('sel', +gb.dataset.beaconIndex === i); if (+gb.dataset.beaconIndex === i) gb.setAttribute('aria-current', 'true'); else gb.removeAttribute('aria-current'); if (+gb.dataset.beaconIndex === i && gb.scrollIntoView) gb.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+    if (gStrip) for (var gs = 0; gs < gStrip.children.length; gs++) { var gb = gStrip.children[gs]; gb.classList.toggle('sel', +gb.dataset.beaconIndex === i); if (+gb.dataset.beaconIndex === i) gb.setAttribute('aria-current', 'true'); else gb.removeAttribute('aria-current'); if (+gb.dataset.beaconIndex === i) scrollStripToReveal(gStrip, gb); }
     if (window.openBeaconExtras) window.openBeaconExtras(i);
   }
   function clearSelection() {
@@ -3542,6 +3547,21 @@
     el.addEventListener('scroll', function () { stripFade(el); }, { passive: true });
     if (stripResize) stripResize.observe(el);
   });
+  function enableStripEdgeAutoScroll(id) { // hover near either end (no click needed) to creep the roster that way, faster the closer to the edge
+    var strip = document.getElementById(id); if (!strip) return;
+    var EDGE = 60, MAX_SPEED = 7, dir = 0, raf = null;
+    function step() { strip.scrollLeft += dir; raf = dir ? requestAnimationFrame(step) : null; }
+    strip.addEventListener('mousemove', function (e) {
+      var r = strip.getBoundingClientRect(), x = e.clientX - r.left, d = 0;
+      if (x < EDGE) d = -Math.max(1, Math.round((EDGE - x) / EDGE * MAX_SPEED));
+      else if (r.width - x < EDGE) d = Math.max(1, Math.round((EDGE - (r.width - x)) / EDGE * MAX_SPEED));
+      dir = d;
+      if (dir && !raf) raf = requestAnimationFrame(step);
+    });
+    strip.addEventListener('mouseleave', function () { dir = 0; });
+  }
+  enableStripEdgeAutoScroll('galaxystrip');
+  enableStripEdgeAutoScroll('solarstrip');
   var solarTimeEl = document.getElementById('solartime');
   function refreshSolarTimeControls() { // orbits stand still under reduced motion: hide pause/speed, keep the true-scale toggle
     if (solarTimeEl) solarTimeEl.classList.toggle('motion-off', solarReducedMotion());
@@ -4292,22 +4312,11 @@
       }
       solarBack.textContent = backText; solarBack.setAttribute('aria-label', backText);
     }
-    var titleEl = document.getElementById('title'), titleHint = titleEl && titleEl.querySelector('small');
-    var titleText = {
-      en: ['Milky Way Galaxy', 'drag to orbit · scroll to zoom · F cinema · M music', 'drag to orbit · pinch to zoom'],
-      hans: ['银河系', '拖动旋转 · 滚轮缩放 · F 影院模式 · M 音乐', '拖动旋转 · 双指缩放'],
-      hant: ['銀河系', '拖曳旋轉 · 滾輪縮放 · F 劇院模式 · M 音樂', '拖曳旋轉 · 雙指縮放'],
-      ja: ['天の川銀河', 'ドラッグで回転 · スクロールでズーム · F シネマ · M 音楽', 'ドラッグで回転 · ピンチでズーム'],
-      ko: ['우리은하', '드래그로 회전 · 스크롤로 확대/축소 · F 시네마 · M 음악', '드래그로 회전 · 핀치로 확대/축소']
-    }[L] || ['Milky Way Galaxy', 'drag to orbit · scroll to zoom · F cinema · M music', 'drag to orbit · pinch to zoom'];
-    if (titleEl && titleEl.firstChild && titleEl.firstChild.nodeType === 3) titleEl.firstChild.nodeValue = titleText[0] + '\n  ';
-    document.title = titleText[0];
+    var titleEl = document.getElementById('title');
+    var titleText = { en: 'Milky Way Galaxy', hans: '银河系', hant: '銀河系', ja: '天の川銀河', ko: '우리은하' }[L] || 'Milky Way Galaxy';
+    if (titleEl && titleEl.firstChild && titleEl.firstChild.nodeType === 3) titleEl.firstChild.nodeValue = titleText;
+    document.title = titleText;
     document.documentElement.lang = { en: 'en', hans: 'zh-Hans', hant: 'zh-Hant', ja: 'ja', ko: 'ko' }[L] || 'en'; // right voice for screen readers, right Han glyphs
-    var hintParts = (solarPointerCoarse ? titleText[2] : titleText[1]).split(' · ');
-    if (viewMode === 'sky') hintParts.splice(1, 1); // the sky dome does not zoom
-    if (titleHint) titleHint.textContent = hintParts.join(' · ');
-    var creditsLink = document.getElementById('credits');
-    if (creditsLink) creditsLink.textContent = { en: 'Credits & source', hans: '鸣谢与源代码', hant: '鳴謝與原始碼', ja: 'クレジットとソース', ko: '출처와 소스 코드' }[L] || 'Credits & source';
     var closeText = { en: 'Close', hans: '关闭', hant: '關閉', ja: '閉じる', ko: '닫기' }[L] || 'Close';
     var closeButton = document.getElementById('bp-close');
     if (closeButton) { closeButton.setAttribute('aria-label', closeText); closeButton.setAttribute('title', closeText); }
@@ -4650,7 +4659,6 @@
   // to cross what the operator is looking at. A glowing head sprite rides the line.
   // Optional (ndc, t0, dndc) let a meteor SHOWER share a radiant + screen direction
   // and stagger start times (future t0s stay dormant via the k<0 guard in updateFx).
-  var meteorNext = videoNow() + 12000 + Math.random() * 20000;
   var novaNext = videoNow() + 90000 + Math.random() * 120000;   // first supernova within 1.5–3.5min, then every 6–12min
   function skyPointInView(nx, ny, r) { // NDC (x,y) → a point r units from the camera along that view ray
     var v = new THREE.Vector3(nx, ny, 0.5).unproject(camera).sub(camera.position).normalize();
@@ -4828,14 +4836,9 @@
     fxList.push({ kind: 'nova', obj: grp, mat: coreMat, mat2: cm, mat3: haloMat, ball: ball, halo: halo, cross: cross, t0: videoNow(), dur: durationMs });
   }
   function updateFx(nowMs) {
-    if (!videoMode && nowMs >= meteorNext) {
-      if (Math.random() < 0.06) { // occasional meteor SHOWER: 6–9 staggered from one on-screen radiant
-        var mN = 6 + ((Math.random() * 4) | 0), rNdc = [Math.random() * 1.2 - 0.6, Math.random() * 0.8 - 0.1];
-        var rDndc = [(Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.3), -(0.35 + Math.random() * 0.3)];
-        for (var mi = 0; mi < mN; mi++) spawnMeteor([rNdc[0] + (Math.random() - 0.5) * 0.5, rNdc[1] + (Math.random() - 0.5) * 0.35], nowMs + mi * 320 + Math.random() * 240, rDndc);
-      } else spawnMeteor();
-      meteorNext = nowMs + 30000 + Math.random() * 30000;
-    }
+    // meteors removed from the galaxy view: a streak crossing a scene that spans multiple
+    // galaxies isn't physically meaningful (meteors are a local, atmospheric effect) — kept
+    // in the sky and solar views, where it represents a real Earth/interplanetary sighting.
     if (!videoMode && nowMs >= novaNext) { spawnNova(); novaNext = nowMs + 360000 + Math.random() * 360000; }
     for (var i = fxList.length - 1; i >= 0; i--) {
       var f = fxList[i], k = (nowMs - f.t0) / f.dur;
