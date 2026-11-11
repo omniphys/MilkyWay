@@ -2744,6 +2744,7 @@
   }
   window.addEventListener('keydown', function (e) { if (document.body.classList.contains('gx-cinema')) return; if ((e.key || '').toLowerCase() === 'escape' && selectedBeacon !== null) { clearSelection(); e.stopImmediatePropagation(); } });
   var beaconTmp = new THREE.Vector3();
+  var selTargetTmp = new THREE.Vector3(), selTargetPrevT = null; // while any beacon card is open, scroll-zoom eases onto orbiting that object instead of the galaxy centre
   function updateBeacons() { // call AFTER render() — galaxyRoot/camera matrices are fresh then
     for (var i = 0; i < BEACONS.length; i++) {
       var b = BEACONS[i];
@@ -4536,6 +4537,20 @@
         if (!galaxyStep && perfScale > 0.26) { perfScale *= 0.5; buildDust(dustFor()); galaxyStep = 'dust density reduced'; } // measured ~5% — last resort
         if (galaxyStep) flashMsg('low frame rate — ' + galaxyStep);
       }
+    }
+    if (!flyState) { // a beacon is selected → orbit/zoom pivot eases onto its (possibly co-rotating) position, not the galaxy centre
+      var selB = selectedBeacon !== null ? BEACONS[selectedBeacon] : null;
+      var hasSel = !!(selB && (!selB.child || selB.parentPts));
+      var parkedAway = !hasSel && returnBtn && returnBtn.style.display === 'block'; // flown to an external galaxy via "fly to" — leave that framing alone
+      if (hasSel || !parkedAway) {
+        if (hasSel) {
+          if (selB.child) selTargetTmp.copy(selB.lp).applyMatrix4(selB.parentPts.matrixWorld); // feature inside an external galaxy: ride that galaxy's transform
+          else { selTargetTmp.copy(selB.p); if (!selB.fixed) selTargetTmp.applyMatrix4(galaxyRoot.matrixWorld); } // same mapping as updateBeacons
+        } else selTargetTmp.set(0, 0, 0); // nothing selected → ease back to the galaxy centre
+        var selDt = selTargetPrevT === null ? 0 : Math.min(0.2, Math.max(0, t - selTargetPrevT));
+        if (selDt > 0) controls.target.lerp(selTargetTmp, 1 - Math.exp(-selDt / 0.2)); // exponential ease — smooth, never an instant snap
+        selTargetPrevT = t;
+      } else selTargetPrevT = null; // parked away from a fly-to; don't let a stale gap turn into a lurch once selection resumes
     }
     if (!stepFly()) controls.update(); // while flying to a galaxy, stepFly drives the camera
     render();
